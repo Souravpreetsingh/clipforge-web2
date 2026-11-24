@@ -1,0 +1,86 @@
+#
+# ClipForge AI - Phase 3 Local Infrastructure
+# Docker Compose for PostgreSQL and Redis
+# Never use 'down -v' as it destroys persistent volumes
+#
+
+
+
+networks:
+  clipforge-net:
+    driver: bridge
+
+volumes:
+  clipforge-postgres-data:
+    driver: local
+  clipforge-redis-data:
+    driver: local
+
+services:
+
+  # SERVICE 1: PostgreSQL
+  #
+  # PostgreSQL 16 for ClipForge AI database persistence.
+  # - Port 5433 avoided common conflict with default 5432
+  # - Named volume for persistence across restarts
+  # - Configurable password via environment variable
+  # - ClipForge database, clipforge user
+  #
+  postgres:
+    image: postgres:16-alpine
+    container_name: clipforge-postgres
+    restart: unless-stopped
+    networks:
+      - clipforge-net
+    environment:
+      POSTGRES_DB: clipforge
+      POSTGRES_USER: clipforge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "5433:5432"
+    volumes:
+      - clipforge-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clipforge -d clipforge"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # NO auto-removal of volumes; persistence via named volume
+    # Password is environment-driven, never hardcoded
+
+  # SERVICE 2: Redis
+  #
+  # Redis 7 for BullMQ background job queue.
+  # - Port 6380 avoided common conflict with default 6379
+  # - Named volume for data persistence
+  # - Health check for readiness
+  #
+  redis:
+    image: redis:7-alpine
+    container_name: clipforge-redis
+    restart: unless-stopped
+    networks:
+      - clipforge-net
+    ports:
+      - "6380:6379"
+    volumes:
+      - clipforge-redis-data:/data
+    command: ["--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+# Startup command (run from project root):
+#   docker compose -f docker-compose.clipforge.yml up -d
+#
+# Status check:
+#   docker compose -f docker-compose.clipforge.yml ps
+#
+# Shutdown command (preserves volumes):
+#   docker compose -f docker-compose.clipforge.yml down
+#
+# NEVER use: docker compose down -v
+# That flag destroys the named volumes (clipforge-postgres-data, clipforge-redis-data)
+# and requires re-seeding the database.

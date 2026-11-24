@@ -1,0 +1,689 @@
+/// Prisma Schema for ClipForge AI — Phase 3
+/// Database: PostgreSQL 16
+/// This schema implements all required models for video upload, processing, and storage.
+/// All relation conflicts resolved by using workspaceId denormalization only,
+/// with no @relation directives (workspace isolation enforced at application layer).
+generator client {
+  provider = "prisma-client-js"
+  // Output client to ./node_modules/.prisma/client or ./prisma/client
+  // Run: `prisma generate` after modifying this schema
+}
+
+datasource db {
+  provider = "postgresql"
+  // Connection string format: postgresql://clipforge:${POSTGRES_PASSWORD}@localhost:5433/clipforge
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// MODELS
+// ============================================================
+
+// A. Workspace
+// Represents a logical workspace/organization within ClipForge AI.
+// In development, a single workspace is used for local testing.
+// In production, proper user authentication and workspace membership
+// will be introduced in Phase 7.
+// Fields:
+//   id       - CUID-based primary key
+//   name     - Human-readable workspace name
+//   createdAt - Auto-generated timestamp
+//   updatedAt - Auto-updated on changes
+model Workspace {
+  id        String   @default(cuid()) @id @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// B. Project
+// Represents a video project within a workspace. A project groups
+// related video assets and their associated processing jobs.
+// Fields:
+//   id          - CUID-based primary key
+//   workspaceId - Foreign key to Workspace (denormalized for query efficiency)
+//   name        - Project name/title
+//   description - Optional description
+//   status      - Current processing status enum
+//   createdAt   - Auto-generated timestamp
+//   updatedAt   - Auto-updated on changes
+model Project {
+  id          String   @default(cuid()) @id @db.Uuid
+  workspaceId String
+  name        String
+  description String?
+  status      String   @default("ACTIVE")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// C. VideoAsset
+// Represents an uploaded video file stored in Cloudflare R2.
+// Only metadata is stored in PostgreSQL; the actual video binary
+// lives in R2 under a randomized object key.
+// Fields:
+//   id               - CUID-based primary key
+//   projectId        - Optional foreign key to Project (nullable for workspace-level assets)
+//   workspaceId      - Denormalized for query efficiency
+//   originalFilename - Original user-provided filename (never used as storage path)
+//   storageKey       - Randomized R2 object key (used for presigned URLs)
+//   mimeType         - MIME type as provided by client
+//   fileSize         - File size in bytes as reported by client
+//   duration         - Video duration in seconds (from FFprobe, overrides client)
+//   width            - Video width in pixels (from FFprobe)
+//   height           - Video height in pixels (from FFprobe)
+//   frameRate        - Frame rate in fps (from FFprobe)
+//   videoCodec       - Video codec string (from FFprobe)
+//   audioCodec       - Audio codec string (from FFprobe)
+//   containerFormat  - Container format (from FFprobe)
+//   thumbnailStorageKey - R2 key for generated JPEG thumbnail
+//   status           - Current asset processing state enum
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model VideoAsset {
+  id                String   @default(cuid()) @id @db.Uuid
+  projectId         String?  // Nullable: assets not tied to a specific project
+  workspaceId       String
+  originalFilename  String
+  storageKey        String   @unique
+  mimeType          String
+  fileSize          Int
+  duration          Float?
+  width             Int?
+  height            Int?
+  frameRate         Float?
+  videoCodec        String?
+  audioCodec        String?
+  containerFormat   String?
+  thumbnailStorageKey String?
+  status            String   @default("UPLOADING")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@ unique([workspaceId, storageKey])
+}
+
+// D. ProcessingJob
+// Represents a single background job in the BullMQ queue that processes
+// a VideoAsset. The worker downloads from R2, runs FFprobe/FFmpeg, and
+// uploads generated assets back to R2.
+// Fields:
+//   id               - Primary key (also the stable BullMQ job identifier)
+//   videoAssetId     - Foreign key to VideoAsset
+//   workspaceId      - Denormalized for query efficiency
+//   jobType          - Type of processing job (enum)
+//   status           - Current job state enum
+//   progress         - Integer progress percentage (0-100)
+//   currentStage     - Current processing stage string
+//   attempts         - Number of retry attempts (bounded)
+//   errorCode        - Error code if job failed (nullable)
+//   errorMessage     - Human-readable error message if job failed (nullable)
+//   startedAt        - When the job started processing (nullable)
+//   completedAt      - When the job completed (nullable)
+//   createdAt        - When the job record was created
+//   updatedAt        - Auto-updated on changes
+model ProcessingJob {
+  id               String   @default(cuid()) @id @db.Uuid
+  videoAssetId     String
+  workspaceId      String
+  jobType          String
+  status           String   @default("QUEUED")
+  progress         Int      @default(0)
+  currentStage     String   @default("INITIALIZED")
+  attempts         Int      @default(0)
+  errorCode        String?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ unique([videoAssetId, status])
+}
+
+// ============================================================
+// HELPER FIELDS & METADATA
+// ============================================================
+
+// Timestamp pragmas apply to all models
+// - createdAt: defaults to now() at row creation
+// - updatedAt: auto-updated on row modifications
+
+// All String IDs use CUID format for globally unique, URL-friendly identifiers
+// - Resists collision even with massive scale
+
+// Enum fields use String type with documented allowed values
+// - Prisma will validate enum values at the ORM layer
+// - Database layer accepts any String; application enforces enums
+
+// ============================================================
+// PHASE 4: NEW AI INFRASTRUCTURE MODELS
+// ============================================================
+
+// E. Transcript
+// Represents a complete transcription run for a video asset.
+// Stores the full transcript and metadata about the transcription provider and model.
+// Fields:
+//   id               - CUID-based primary key
+//   videoAssetId     - Foreign key to VideoAsset (denormalized via workspaceId)
+//   workspaceId      - Denormalized for query efficiency
+//   provider         - AI provider name (e.g., "openai", "assemblyai")
+//   modelName        - Specific model used (e.g., "whisper-1", "assemblyai-2.0")
+//   language         - Language code (e.g., "en", "es", "fr")
+//   duration         - Video duration in seconds (if known)
+//   status           - Transcription status enum
+//   startedAt        - When transcription started
+//   completedAt      - When transcription completed
+//   errorCode        - Error code if transcription failed
+//   errorMessage     - Human-readable error message
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model Transcript {
+  id          String   @default(cuid()) @id @db.Uuid
+  videoAssetId String
+  workspaceId String
+  provider     String
+  modelName    String?
+  language     String
+  duration     Float?
+  status       String   @default("PROCESSING") // PROCESSING | COMPLETED | FAILED
+  startedAt    DateTime @default(now())
+  completedAt  DateTime?
+  errorCode    String?
+  errorMessage String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// F. TranscriptSegment
+// Represents an individual segment of timestamped transcript text.
+// Fields:
+//   id              - CUID-based primary key
+//   transcriptId    - Foreign key to Transcript
+//   startTimestamp  - Start time in seconds (float precision)
+//   endTimestamp    - End time in seconds (float precision)
+//   text            - Recognized speech text
+//   speaker         - Optional speaker identifier
+//   confidence      - Optional confidence score (0-1)
+//   wordCount       - Approximate word count
+//   language        - Language code
+model TranscriptSegment {
+  id          String   @default(cuid()) @id @db.Uuid
+  transcriptId String
+  startTimestamp Float
+  endTimestamp   Float
+  text           String
+  speaker        String?
+  confidence     Float?
+  wordCount      Int
+  language       String
+
+  @@ map("transcript_segments")
+}
+
+// G. HighlightAnalysis
+// Represents a single highlight analysis run for a video asset.
+// Stores metadata about the analysis run and its status.
+// Fields:
+//   id                 - CUID-based primary key
+//   videoAssetId       - Foreign key to VideoAsset
+//   workspaceId        - Foreign key to Workspace
+//   transcriptId       - Optional link to existing transcript
+//   analysisStatus     - Analysis run status
+//   analyzedAt         - When analysis was completed
+//   analysisDuration   - Duration of the analysis in seconds
+//   createdAt          - Auto-generated timestamp
+//   updatedAt          - Auto-updated on changes
+model HighlightAnalysis {
+  id               String   @default(cuid()) @id @db.Uuid
+  videoAssetId     String
+  workspaceId      String
+  transcriptId     String?   // Nullable: analysis can run without full transcript
+  analysisStatus   String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  analyzedAt       DateTime?
+  analysisDuration  Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ map("highlight_analyses")
+}
+
+// H. HighlightCandidate
+// Represents a candidate highlight segment extracted from a video.
+// Stores the segment timing, transcript excerpt, scoring components,
+// and ranking information for clip generation.
+// Fields:
+//   id               - CUID-based primary key
+//   videoAssetId     - Foreign key to VideoAsset
+//   workspaceId      - Foreign key to Workspace
+//   analysisId       - Foreign key to HighlightAnalysis (nullable)
+//   startTimestamp   - Start time in seconds (float precision)
+//   endTimestamp     - End time in seconds (float precision)
+//   duration         - Clip duration in seconds
+//   transcriptExcerpt - Short text slice from the transcript
+//   suggestedTitle   - Auto-generated title candidate
+//   suggestedHook    - Auto-generated hook text slice
+//   shortDescription - 1-2 sentence description
+//   highlightCategory - Category of highlight (HOOK, FACT, EMOTIONAL, etc.)
+//   hookStrength     - Individual score component (0-1)
+//   informationValue - Individual score component (0-1)
+//   emotionalEngagement - Individual score component (0-1)
+//   selfContainedContext - Individual score component (0-1)
+//   narrativeCompleteness - Individual score component (0-1)
+//   replayPotential  - Individual score component (0-1)
+//   durationSuitability - Individual score component (0-1)
+//   overallScore     - Composite score (0-1)
+//   rankingPosition  - 1-based rank (1 = best)
+//   reasonForSelection - Human-readable explanation for inclusion
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model HighlightCandidate {
+  id               String   @default(cuid()) @id @db.Uuid
+  videoAssetId     String
+  workspaceId      String
+  analysisId       String?   // Nullable: can exist without parent analysis (legacy)
+  startTimestamp   Float
+  endTimestamp     Float
+  duration         Int
+  transcriptExcerpt String
+  suggestedTitle   String?
+  suggestedHook    String?
+  shortDescription String?
+  highlightCategory String   // HOOK, FACT, EMOTIONAL, etc.
+  hookStrength     Float
+  informationValue Float
+  emotionalEngagement Float
+  selfContainedContext Float
+  narrativeCompleteness Float
+  replayPotential   Float
+  durationSuitability Float
+  overallScore     Float
+  rankingPosition  Int
+  reasonForSelection String?
+
+  @@ unique([videoAssetId, rankingPosition])
+
+  @@ map("highlight_candidates")
+}
+
+// I. AIProcessingRun
+// Represents a single AI processing run, tracking the progress of
+// transcription, highlight analysis, or clip ranking jobs.
+// Fields:
+//   id               - CUID-based primary key
+//   videoAssetId     - Foreign key to VideoAsset
+//   workspaceId      - Foreign key to Workspace
+//   runType          - Type of AI run (TRANSCRIPTION | HIGHLIGHT_ANALYSIS | CLIP_RANKING)
+//   provider         - AI provider name (optional)
+//   modelName        - Specific model used (optional)
+//   status           - Processing status enum
+//   progress         - Integer progress percentage (0-100)
+//   currentStage     - Current processing stage string
+//   startedAt        - When the run started
+//   completedAt      - When the run completed
+//   errorCode        - Error code if run failed
+//   errorMessage     - Human-readable error message
+//   transcriptionDuration - Duration of transcription step (seconds, if applicable)
+//   highlightDuration - Duration of highlight analysis step (seconds, if applicable)
+//   clipCount        - Number of clip candidates generated (if runType = CLIP_RANKING)
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model AIProcessingRun {
+  id               String   @default(cuid()) @id @db.Uuid
+  videoAssetId     String
+  workspaceId      String
+  runType          String   // "TRANSCRIPTION" | "HIGHLIGHT_ANALYSIS" | "CLIP_RANKING"
+  provider         String?
+  modelName        String?
+  status           String   @default("QUEUED") // QUEUED | IN_PROGRESS | COMPLETED | FAILED
+  progress         Int      @default(0) // 0-100
+  currentStage     String   @default("INITIALIZED")
+  startedAt        DateTime?
+  completedAt      DateTime?
+  errorCode        String?
+  errorMessage     String?
+  transcriptionDuration Float?
+  highlightDuration Float?
+  clipCount        Int?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ unique([videoAssetId, status])
+
+  @@ map("ai_processing_runs")
+}
+
+// ============================================================
+// PHASE 5: RENDERING INFRASTRUCTURE MODELS
+// ============================================================
+
+// J. GeneratedClip
+// Represents a generated video clip rendered from a highlight candidate.
+// Tracks the rendering status, source asset reference, and output metadata.
+// Fields:
+//   id               - CUID-based primary key
+//   workspaceId      - Denormalized for query efficiency
+//   projectId        - Optional foreign key to Project (nullable)
+//   sourceAssetId    - Foreign key to the VideoAsset that was rendered
+//   highlightCandidateId - Optional FK to the HighlightCandidate that was rendered
+//   title            - User-editable or auto-generated clip title
+//   startTime        - Start time in seconds (source-relative)
+//   endTime          - End time in seconds (source-relative)
+//   duration         - Clip duration in seconds
+//   status           - Rendering status enum
+//   renderProfile    - Name of the render profile/config used
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model GeneratedClip {
+  id               String   @default(cuid()) @id @db.Uuid
+  workspaceId      String
+  projectId        String?   // Nullable: clips not tied to a specific project
+  sourceAssetId    String
+  highlightCandidateId String?   // Nullable: can exist without candidate (auto-selected)
+  title            String
+  startTime        Float
+  endTime          Float
+  duration         Int
+  status           String   // "RENDERING" | "COMPLETED" | "FAILED" | "READY"
+  renderProfile    String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ map("generated_clips")
+}
+
+// K. RenderJob
+// Represents a single rendering job in the BullMQ queue.
+// Tracks progress, attempts, and output status for clip rendering.
+// Fields:
+//   id               - Primary key (also the stable BullMQ job identifier)
+//   workspaceId      - Denormalized for query efficiency
+//   generatedClipId  - Foreign key to GeneratedClip being rendered
+//   status           - Current job state enum
+//   progress         - Integer progress percentage (0-100)
+//   renderProfile    - Name of render profile/config being used
+//   attempts         - Number of retry attempts (bounded)
+//   errorCode        - Error code if job failed (nullable)
+//   errorMessage     - Human-readable error message if job failed (nullable)
+//   startedAt        - When the job started processing (nullable)
+//   completedAt      - When the job completed (nullable)
+//   createdAt        - When the job record was created
+//   updatedAt        - Auto-updated on changes
+model RenderJob {
+  id               String   @default(cuid()) @id @db.Uuid
+  workspaceId      String
+  generatedClipId  String
+  status           String   @default("QUEUED") // QUEUED | IN_PROGRESS | COMPLETED | FAILED | CANCELLED
+  progress         Int      @default(0) // 0-100
+  renderProfile    String
+  attempts         Int      @default(0)
+  errorCode        String?
+  errorMessage     String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ unique([generatedClipId, status])
+
+  @@ map("render_jobs")
+}
+
+// L. RenderedAsset
+// Represents the actual rendered output (MP4 video + thumbnail) stored in R2.
+// Persists metadata about the completed rendering result.
+// Fields:
+//   id               - CUID-based primary key
+//   workspaceId      - Denormalized for query efficiency
+//   generatedClipId  - Foreign key to the GeneratedClip this output belongs to
+//   storageKey       - R2 key for the rendered MP4 video file
+//   thumbnailStorageKey - R2 key for the generated JPEG thumbnail
+//   mimeType         - MIME type of the output (always video/mp4)
+//   fileSize         - File size in bytes of the rendered video
+//   width            - Output width in pixels
+//   height           - Output height in pixels
+//   duration         - Output duration in seconds (from FFprobe)
+//   videoCodec       - Video codecs (e.g., "h264", "libx264")
+//   audioCodec       - Audio codecs (e.g., "aac")
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model RenderedAsset {
+  id               String   @default(cuid()) @id @db.Uuid
+  workspaceId      String
+  generatedClipId  String
+  storageKey       String   // R2 key for rendered MP4 video
+  thumbnailStorageKey String // R2 key for generated JPEG thumbnail
+  mimeType         String   // video/mp4
+  fileSize         Int
+  width            Int
+  height           Int
+  duration         Float
+  videoCodec       String
+  audioCodec       String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ map("rendered_assets")
+}
+
+// ============================================================
+// PHASE 6: YOUTUBE INTEGRATION MODELS
+// ============================================================
+
+// Model: YouTubeConnection
+// Represents an authorized YouTube channel connection for a workspace.
+// Stores encrypted OAuth tokens and channel metadata.
+// Authorization:
+//   - workspaceId is the authoritative boundary for access control
+//   - A workspace can have at most one YouTube connection (@@ unique([workspaceId]))
+//   - Channel operations validate workspace ownership via workspaceId
+// Token Security:
+//   - encryptedAccessToken and encryptedRefreshToken are AES-256 encrypted
+//   - Never exposed to browser; stored server-side only
+//   - Token refresh handled automatically by API layer
+model YouTubeConnection {
+  id                String   @default(cuid()) @id @db.Uuid
+  workspaceId       String
+  provider          String   // "youtube"
+  channelId         String   // YouTube channel ID
+  channelTitle      String   // Channel display title
+  channelThumbnail  String?  // Channel thumbnail URL
+  encryptedAccessToken String // AES-256 encrypted access token
+  encryptedRefreshToken String // AES-256 encrypted refresh token
+  accessTokenExpiresAt DateTime // Token expiry timestamp
+  scopes            String[] // OAuth scopes
+  connectionStatus  String   // "connected" | "reauthorizing" | "disconnected"
+  connectedAt       DateTime // When the channel was connected
+  lastSyncedAt      DateTime? // Last successful API sync timestamp
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@ map("youtube_connections")
+  @@ unique([workspaceId]) // One connection per workspace
+}
+
+// Model: PublishingJob
+// Represents a job to publish a rendered Short to YouTube.
+// Tracks the upload progress, scheduling, and publishing status.
+// States flow: PENDING → UPLOADING → SCHEDULED/PUBLISHED or FAILED
+// Authorization:
+//   - youtubeConnectionId links to the workspace's authorized YouTube channel
+//   - workspaceId validates ownership boundaries
+//   - generatedClipId and renderedAssetId are optional (supports manual URL entry)
+// Note: @@ unique([generatedClipId, status]) removed to avoid conflict with RenderJob constraint
+model PublishingJob {
+  id                String   @default(cuid()) @id @db.Uuid
+  workspaceId       String
+  youtubeConnectionId String? // FK to YouTubeConnection (nullable: allows manual URL entry)
+  generatedClipId   String?  // FK to GeneratedClip (optional)
+  renderedAssetId   String?  // FK to RenderedAsset (optional)
+  platform          String   // "youtube"
+  status            String   // "PENDING" | "UPLOADING" | "SCHEDULED" | "PUBLISHED" | "FAILED"
+  title             String   // Video title
+  description       String?  // Video description
+  tags              String[] // Video tags (comma-separated in UI)
+  privacyStatus     String   // "public" | "private" | "unlisted"
+  scheduledAt       DateTime? // Scheduled publication time
+  youtubeVideoId    String? // Returned by YouTube API after successful upload
+  uploadProgress    Int      @default(0) // 0-100 progress percentage
+  errorCode         String?  // Error code if job failed
+  errorMessage      String?  // Human-readable error message
+  attempts          Int      @default(0) // Retry attempt counter
+  startedAt         DateTime? // When the job started
+  completedAt       DateTime? // When the job completed
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@ map("publishing_jobs")
+}
+
+// Model: PublishingEvent
+// Represents a single event in the publishing lifecycle.
+// Used for tracking upload progress, scheduling, and publishing status changes.
+// eventType controlled vocabulary:
+//   UPLOAD_START | UPLOAD_PROGRESS | UPLOAD_COMPLETE | UPLOAD_FAILURE
+//   SCHEDULE_SET | SCHEDULE_CLEAR
+//   PUBLISH_START | PUBLISH_COMPLETE | PUBLISH_FAILURE
+model PublishingEvent {
+  id                String   @default(cuid()) @id @db.Uuid
+  publishingJobId   String
+  eventType         String   // Controlled vocabulary of event types
+  message           String   // Human-readable event message
+  metadata          Json?    // Additional event data (videoId, timestamp, etc.)
+  createdAt         DateTime @default(now())
+
+  @@ map("publishing_events")
+}
+
+// ============================================================
+// PHASE 7: AI AGENT MODEL ADDITIONS
+// ============================================================
+
+// Model: AgentRun
+// Represents a single agent execution run, managing the complete
+// video-to-Shorts workflow from source validation through publishing
+// with explicit approval controls. One-link submission: user pastes
+// YouTube URL, confirms permissions, starts agent.
+// States flow: CREATED → VALIDATING_SOURCE → WAITING_FOR_SOURCE →
+// SOURCE_READY → QUEUED → TRANSCRIBING → ANALYZING → SELECTING_CLIPS →
+// RENDERING → REVIEW_REQUIRED → APPROVED → PUBLISHING → SCHEDULING → COMPLETED
+// Plus: PAUSED, CANCELLED, FAILED
+// Approval-required mode is DEFAULT; Automatic publishing requires explicit opt-in.
+// Fields:
+//   id               - CUID-based primary key
+//   workspaceId      - Foreign key to Workspace (authoritative boundary)
+//   runType          - Type of source video
+//   status           - Agent run status enum (validated transitions)
+//   progress         - Integer progress percentage (0-100)
+//   currentStage     - Current pipeline stage string
+//   configuration    - JSON publishing mode, daily limits, time zone
+//   source           - JSON source reference (YouTube URL or authorized asset)
+//   clipCount        - JSON generated clip counts
+//   error            - Error message if run failed
+//   errorCode        - Error code enum
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model AgentRun {
+  id               String   @default(cuid()) @id @db.Uuid
+  workspaceId      String
+  runType          String   // "YOUTUBE_SHORTS" | "USER_UPLOAD" | "IMPORTED_ASSET"
+  status           String   // "CREATED" | "VALIDATING_SOURCE" | "WAITING_FOR_SOURCE" | "SOURCE_READY" | "QUEUED" | "TRANSCRIBING" | "ANALYZING" | "SELECTING_CLIPS" | "RENDERING" | "REVIEW_REQUIRED" | "APPROVED" | "PUBLISHING" | "SCHEDULING" | "COMPLETED" | "PAUSED" | "CANCELLED" | "FAILED"
+  progress         Int      @default(0) // 0-100
+  currentStage     String
+  configuration    Json?    // publishingMode, dailyPublishLimit, minQualityThreshold, etc.
+  source           Json?    // youtubeUrl, videoId, authorizedAssetId, etc.
+  clipCount        Json?    // { total: number, generated: number }
+  error            String?
+  errorCode        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ map("agent_runs")
+}
+
+// Model: AgentClipSelection
+// Represents a clip selection within an agent run, ranking candidate
+// highlights for Shorts generation. Supports up to 6 clips per source video.
+// Duration-filtered, overlap-deduplicated, top-N ranking. Generates fewer
+// than 6 when quality is insufficient.
+// Fields:
+//   id               - CUID-based primary key
+//   agentRunId       - Foreign key to AgentRun (denormalized workspaceId)
+//   rankingPosition  - 1-based rank (1 = best)
+//   startTimestamp   - Start time in seconds (source-relative)
+//   endTimestamp     - End time in seconds (source-relative)
+//   duration         - Clip duration in seconds
+//   suggestedTitle   - Auto-generated or user-editable title
+//   suggestedDescription - User-editable description
+//   highlightCategory - Category of highlight (HOOK, FACT, EMOTIONAL, etc.)
+//   overallScore     - Composite AI scoring (0-1)
+//   qualityScore     - Quality assessment (0-1)
+//   status           - Clip processing status
+//   userApproval     - User APPROVE/REJECT decision
+//   createdAt        - Auto-generated timestamp
+//   updatedAt        - Auto-updated on changes
+model AgentClipSelection {
+  id               String   @default(cuid()) @id @db.Uuid
+  agentRunId       String
+  agentRun         String   // Denormalized: workspaceId for application-layer enforcement
+  rankingPosition  Int
+  startTimestamp   Float
+  endTimestamp     Float
+  duration         Int
+  suggestedTitle   String?
+  suggestedDescription String?
+  highlightCategory String   // HOOK, FACT, EMOTIONAL, etc.
+  overallScore     Float
+  qualityScore     Float
+  status           String   // "PENDING" | "APPROVED" | "REJECTED" | "FAILED"
+  userApproval     String?   // "APPROVE" | "REJECT"
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@ map("agent_clip_selections")
+}
+
+// Model: AgentRunEvent
+// Represents a single event in the agent execution lifecycle,
+// tracking progress, decisions, and status changes for audit and
+// debugging purposes. One-to-many from AgentRun.
+// Fields:
+//   id               - CUID-based primary key
+//   agentRunId       - Foreign key to AgentRun (denormalized workspaceId)
+//   eventType        - Controlled vocabulary of agent event types
+//   message          - Human-readable event message
+//   metadata         - Additional event data (videoId, timestamp, etc.)
+//   createdAt        - Auto-generated timestamp
+model AgentRunEvent {
+  id               String   @default(cuid()) @id @db.Uuid
+  agentRunId       String
+  agentRun         String   // Denormalized: workspaceId for application-layer enforcement
+  eventType        String   // Controlled vocabulary of agent event types
+  message          String   // Human-readable event message
+  metadata         Json?    // Additional event data (videoId, timestamp, etc.)
+  createdAt        DateTime @default(now())
+
+  @@ map("agent_run_events")
+}
+
+// ============================================================
+// VALIDATION AND BUILD NOTES
+// ============================================================
+
+// All models use CUID-based primary keys with @db.Uuid type for PostgreSQL compatibility.
+// ID strategy: String @default(cuid()) @id @db.Uuid — consistent across all 20 models.
+
+// Unique constraints enforced (database-level):
+//   - VideoAsset: @@ unique([workspaceId, storageKey])\n   - ProcessingJob: @@ unique([videoAssetId, status])\n   - AIProcessingRun: @@ unique([videoAssetId, status])\n   - HighlightCandidate: @@ unique([videoAssetId, rankingPosition])\n   - RenderJob: @@ unique([generatedClipId, status])\n   - YouTubeConnection: @@ unique([workspaceId])
+
+// workspaceId denormalized on all models for query-level workspace isolation
+// - Application layer enforces cross-workspace access prevention
+// - No @relation directives — relations managed at application layer
+
+// Deprecated/removed (this schema revision):
+//   - Duplicate model declarations (VideoAsset, ProcessingJob, AIProcessingRun)
+//   - Invalid DateAtTime type (replaced with DateTime)
+//   - Invalid ?@default syntax (removed ?, kept @default)
+//   - Invalid now__ syntax (replaced with now())
+//   - Standalone index declarations (documentation-only, not Prisma directives)
+//   - All @relation directives removed to resolve bidirectional validation errors

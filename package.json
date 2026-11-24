@@ -6,21 +6,38 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "worker:dev": "npx ts-node worker/index.ts",
+    "worker:start": "node -r tsconfig/register worker/index.ts",
+    "worker:build": "npx tsc --project worker/tsconfig.json",
+    "db:migrate": "prisma migrate make --dev-commit-name",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "test": "echo 'Tests not yet implemented — see docs/'"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.580.0",
+    "@aws-sdk/s3-request-presigner": "^3.580.0",
+    "@prisma/client": "^5.2.0",
+    "bullmq": "^5.6.0",
     "next": "16.4.6",
+    "node-fetch": "^3.3.2",
     "react": "19.3.0",
-    "react-dom": "19.3.0"
+    "react-dom": "19.3.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@types/uuid": "^9.0.0",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
+    "prisma": "^5.2.0",
     "tailwindcss": "4.3.3",
+    "ts-node": "^10.9.2",
     "typescript": "^5"
   }
 }
