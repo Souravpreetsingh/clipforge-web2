@@ -1,6 +1,16 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  async redirects() {
+    return [
+      {
+        source: "/",
+        destination: "/dashboard",
+        permanent: false,
+      },
+    ];
+  },
+
   // The legacy codebase still has TypeScript debt in server/worker modules.
   // Turbopack compiles the app successfully; skip the blocking type-check so
   // deployments can proceed while that debt is cleaned up incrementally.
