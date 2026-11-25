@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -20,23 +22,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from '@/components/u
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
-import { areCredentialsMissing, areCredentialsMissing as checkCredentials } from '@/lib/integrations/youtube';
-import type { TokenStorageInterface } from '@/lib/integrations/youtube/tokens';
-import { generateDefaultMetadata, validatePublishingMetadata } from '@/lib/integrations/youtube/videos';
-import { createPublishingJobComplete } from '@/lib/integrations/youtube/publishing';
-import { YouTubeErrorCode, createAuthError } from '@/lib/integrations/youtube/errors';
-
-// Mock storage for development
-const mockStorage = new (await import('@/lib/integrations/youtube/tokens')).MockTokenStorage();
-
-// Helper functions
-function areCredentialsMissing(): boolean {
-  return (
-    typeof process?.env?.GOOGLE_CLIENT_ID === 'undefined' ||
-    typeof process?.env?.GOOGLE_CLIENT_SECRET === 'undefined' ||
-    typeof process?.env?.GOOGLE_REDIRECT_URI === 'undefined'
-  );
-}
+import {
+  areCredentialsMissing,
+  generateDefaultMetadata,
+  validatePublishingMetadata,
+  createPublishingJobComplete,
+  YouTubeErrorCode,
+  createAuthError,
+  MockTokenStorage,
+} from '@/lib/integrations/youtube/client-safe';
 
 // Date utils
 function parseIsoDate(dateStr: string | undefined): Date {
@@ -234,7 +228,7 @@ export function PublishShort() {
             privacyStatus: metadata.privacyStatus,
             scheduledAt: metadata.scheduledAt,
           },
-          new (await import('@/lib/integrations/youtube/tokens')).MockTokenStorage()
+          new MockTokenStorage()
         );
 
         if (!result.success) {
@@ -302,7 +296,7 @@ export function PublishShort() {
         <div className="flex-1">
           <Input
             placeholder="Date"
-            value:controlled
+            value={metadata.scheduledAt ? metadata.scheduledAt.toISOString().slice(0, 10) : ''}
             onChange={e => handleMetadataChange('scheduledAt', e.target.value)}
             className="flex-1"
           />
@@ -315,7 +309,7 @@ export function PublishShort() {
         <Clock className="mt-1 flex-shrink-0 h-4 w-4 text-muted-foreground" />
         <Input
           placeholder="3:00 PM"
-          value:controlled
+          value={metadata.scheduledAt ? metadata.scheduledAt.toISOString().slice(11, 16) : ''}
           onChange={e => handleMetadataChange('scheduledAt', e.target.value)}
           className="flex-1"
         />
@@ -363,10 +357,10 @@ export function PublishShort() {
           {/* Video thumbnail */}
           <div className="relative w-24 h-14 rounded-lg overflow-hidden flex-shrink-0">
             <img
-              src: selectedClip.renderedAsset?.thumbnailStorageKey
+              src={selectedClip.renderedAsset?.thumbnailStorageKey
                 ? `/api/clips/${workspaceId}/preview-url` // Would be presigned URL
-                : '/placeholder-thumbnail.png',
-              alt: selectedClip.title || 'Preview',
+                : '/placeholder-thumbnail.png'}
+              alt={selectedClip.title || 'Preview'}
               className="w-full h-full object-cover"
               loading="lazy"
             />
@@ -396,10 +390,9 @@ export function PublishShort() {
             <span className="text-error">*</span>
           </label>
           <Input
-            value:controlled
+            value={metadata.title}
             onChange={e => handleMetadataChange('title', e.target.value)}
             placeholder="My Great Hook"
-            defaultValue={metadata.title}
             maxLength={100}
             className="w-full"
             ariaRequired={true}
@@ -412,10 +405,9 @@ export function PublishShort() {
             Description
           </label>
           <Textarea
-            value:controlled
+            value={metadata.description}
             onChange={e => handleMetadataChange('description', e.target.value)}
             placeholder="Add a description for your video..."
-            defaultValue={metadata.description}
             rows={3}
             className="w-full"
           />
@@ -430,10 +422,9 @@ export function PublishShort() {
             </span>
           </label>
           <Input
-            value:controlled
+            value={metadata.tags.join(', ')}
             onChange={e => handleMetadataChange('tags', e.target.value.split(',').filter((t: string) => t.trim()))}
             placeholder="clipforge, short, ai-generated"
-            defaultValue={metadata.tags.join(', ')}
             className="w-full"
             inputMode="text"
           />
@@ -448,10 +439,9 @@ export function PublishShort() {
             Privacy Status
           </label>
           <RadioGroup
-            value:controlled
+            value={metadata.privacyStatus}
             onValueChange={handleMetadataChange}
             name="privacyStatus"
-            defaultValue={metadata.privacyStatus}
           >
             {privacyOptions.map((option) => (
               <RadioGroupItem
@@ -491,12 +481,16 @@ export function PublishShort() {
           className="w-full"
         >
           {status === 'uploading' ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
-            Uploading...
-          ) : status === 'scheduled'
-            ? 'Schedule'
-            : 'Publish to YouTube'
-        )}
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin inline" />
+              Uploading...
+            </>
+          ) : status === 'scheduled' ? (
+            'Schedule'
+          ) : (
+            'Publish to YouTube'
+          )}
+        </Button>
       </div>
 
       {/* Error display */}
@@ -542,3 +536,5 @@ export function PublishShort() {
     </div>
   );
 }
+
+export default PublishShort;

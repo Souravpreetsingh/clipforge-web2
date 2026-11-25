@@ -8,9 +8,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function POST(request: NextRequest, { params }: { params: { id: string; clipId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string; clipId: string }> }) {
   try {
-    const { id, clipId } = params;
+    const { id, clipId } = await params;
 
     // Update the clip selection to approved
     const updatedClip = await prisma.agentClipSelection.update({

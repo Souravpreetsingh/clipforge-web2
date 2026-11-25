@@ -1,5 +1,4 @@
 import { Suspense } from 'react';
-import {} from '@/lib/integrations/youtube';
 
 import IntegrationsLayout from '@/components/integrations/IntegrationsLayout';
 import ConnectYouTube from '@/components/integrations/ConnectYouTube';

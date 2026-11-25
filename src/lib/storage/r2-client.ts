@@ -6,40 +6,45 @@
 /// R2_ENDPOINT format: https://account-id.r2.cloudflarestorage.com
 /// Bucket is kept private; presigned URLs are used for all access.
 
-import { S3Client } from "@aws-sdk/client-s3";
-import { PutObjectCommand, GetObjectHeadCommand, GetObjectCommand } from "@aws-sdk/s3-request-presigner";
-import { deleteObject } from "@aws-sdk/s3-delete-object-tagging"; // base, adjust as needed
+import { S3Client, PutObjectCommand, GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { S3ClientConfig } from "@aws-sdk/client-s3";
 
 // ============================================================
 // CONFIGURATION — from environment variables only
 // ============================================================
 
-// Validate required env vars at module load time
 const requiredEnvs = [
   "R2_ACCOUNT_ID",
-  "R2_ACCESS_KEY_ID", 
+  "R2_ACCESS_KEY_ID",
   "R2_SECRET_ACCESS_KEY",
   "R2_BUCKET_NAME",
   "R2_ENDPOINT",
 ];
 
-for (const env of requiredEnvs) {
-  if (!process.env[env]) {
+/** Validate R2 configuration only when an R2 operation is performed. */
+function requireR2Config() {
+  const missing = requiredEnvs.filter((env) => !process.env[env]);
+
+  if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variable: ${env}. ` +
-      "Set this in your .env.local or production environment. " +
-      "Do NOT add NEXT_PUBLIC prefix."
+      `Missing required environment variables: ${missing.join(", ")}. ` +
+      "Set these in your production environment. Do NOT add NEXT_PUBLIC prefix."
     );
   }
+
+  return {
+    bucketName: process.env.R2_BUCKET_NAME as string,
+    endpoint: process.env.R2_ENDPOINT as string,
+  };
 }
 
-// Extract account ID from env for endpoint construction
-const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID;
-const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID;
-const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY;
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
-const R2_ENDPOINT = process.env.R2_ENDPOINT;
+// Safe defaults keep module import (and builds) working without storage secrets.
+const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID || "";
+const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID || "";
+const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY || "";
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "";
+const R2_ENDPOINT = process.env.R2_ENDPOINT || "https://placeholder.r2.cloudflarestorage.com";
 
 // S3 client configuration — S3-compatible R2 endpoint
 // - Region is 'auto' for Cloudflare R2
@@ -91,7 +96,7 @@ export const ALLOWED_VIDEO_MIME_TYPES = [
   "video/ogg",
   "video/x-msvideo",   // AVI
   "video/3gpp",
-].;
+];
 
 // Allowed MIME types for image thumbnails
 export const ALLOWED_IMAGE_MIME_TYPES = [
@@ -99,7 +104,7 @@ export const ALLOWED_IMAGE_MIME_TYPES = [
   "image/png",
   "image/webp",
   "image/gif",
-].;
+];
 
 // Storage key organization (randomized, never user-provided paths)
 export const STORAGE_PATHS = {
@@ -125,7 +130,7 @@ export const ALLOWED_VIDEO_EXTENSIONS = [
   ".ogg",
   ".avi",
   ".3gp",
-].();
+];
 
 // ============================================================
 // R2 UPLOAD — Presigned PUT URL generation
@@ -179,6 +184,8 @@ export async function generateR2PresignedUploadUrl(
   assetId: string,
   contentType: string
 ): Promise<R2UploadUrlResult> {
+  const { bucketName, endpoint } = requireR2Config();
+
   // Validate MIME type against allowed list
   const lowerContentType = contentType.toLowerCase();
   const isAllowedVideo = ALLOWED_VIDEO_MIME_TYPES.includes(lowerContentType);
@@ -199,8 +206,7 @@ export async function generateR2PresignedUploadUrl(
     : STORAGE_PATHS.thumbnails;
 
   // Generate randomized object key — NEVER use user-provided filename
-  // Use a CUID-based key for global uniqueness
-  const import { v4 as uuidv4 } from "uuid";
+  // Use a timestamp + random suffix for global uniqueness
   const timestamp = Date.now().toString(36);
   const randomPart = Math.random().toString(36).substring(2, 10);
   const uniqueSuffix = `${timestamp}-${randomPart}`;
@@ -208,45 +214,18 @@ export async function generateR2PresignedUploadUrl(
   const objectKey = pathFn(workspaceId, safeAssetId);
 
   // Build the full R2 object URL for reference (not client-facing)
-  const objectUrl = `${R2_ENDPOINT}/${R2_BUCKET_NAME}/${objectKey}`;
+  const objectUrl = `${endpoint}/${bucketName}/${objectKey}`;
 
-  // Generate presigned PUT URL
-  // The putObjectPresigner creates a URL that authorizes a PUT operation
-  const putObjectCommand = new PutObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+  // Generate presigned PUT URL using getSignedUrl (AWS SDK v3)
+  const command = new PutObjectCommand({
+    Bucket: bucketName,
     Key: objectKey,
-    ContentType: isVideo ? contentType : "image/jpeg", // Images always JPEG for thumbnails
-    // Server-side storage class can be added here
+    ContentType: isVideo ? contentType : "image/jpeg",
   });
 
-  // @ts-expect-next-line - getPresignedUrl is available in aws-sdk v3
-  const presigner = new GetObjectCommand; // placeholder - actually need Presigner
-  // Correct approach: use getSignedUrl from @aws-sdk/s3-request-presigner
-
-  // Actually, for presigned PUT URLs, we need to use the proper presigner
-  // Let me use the correct import pattern
-
-  // Re-approach: Use getPutObjectPresigner from @aws-sdk/s3-request-presigner
-  // This is available in @aws-sdk@3.x
-  let presignedUrl: string;
-
-  try {
-    // @ts-expect-next-line - proper import
-    const { getPutObjectPresigner } = await import("@aws-sdk/s3-request-presigner");
-    
-    const presignerFn = getPutObjectPresigner(r2Client);
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET_NAME,
-      Key: objectKey,
-      ContentType: isVideo ? contentType : "image/jpeg",
-    });
-
-    presignedUrl = await presignerFn(command, R2_UPLOAD_URL_TTL_SECONDS);
-  } catch (importError) {
-    throw new Error(
-      `Failed to import getPutObjectPresigner: ${importError instanceof Error ? importError.message : "unknown error"}`
-    );
-  }
+  const presignedUrl = await getSignedUrl(r2Client, command, {
+    expiresIn: R2_UPLOAD_URL_TTL_SECONDS,
+  });
 
   return {
     presignedUrl,
@@ -276,9 +255,10 @@ export async function generateR2PresignedDownloadUrl(
   objectKey: string,
   expiresInSeconds: number = R2_DOWNLOAD_URL_TTL_SECONDS
 ): Promise<string> {
-  const { getSignedUrl } = await import("@aws-sdk/s3-request-presigner");
+  const { bucketName } = requireR2Config();
+
   const command = new GetObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: bucketName,
     Key: objectKey,
   });
 
@@ -351,12 +331,10 @@ export async function verifyR2ObjectExists(
   etag?: string;
   contentType?: string;
 }> {
-  const { headObject } = await import("@aws-sdk/aws-sdk-client-runtime");
-  // Actually, use HeadObjectCommand from @aws-sdk/client-s3
-  
-  const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+  const { bucketName } = requireR2Config();
+
   const command = new HeadObjectCommand({
-    Bucket: R2_BUCKET_NAME,
+    Bucket: bucketName,
     Key: objectKey,
   });
 

@@ -14,13 +14,16 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: Request,
-  { params }: { params: { workspaceId: string; id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    const workspaceId = new URL(request.url).searchParams.get("workspaceId") || "";
+
     // Query the transcript for this asset
     const transcript = await prisma.transcript.findFirst({
       where: {
-        videoAssetId: params.id,
+        videoAssetId: id,
         language: "en", // Default to English; in production would accept lang query param
       },
       include: {
@@ -40,8 +43,8 @@ export async function GET(
     // Ownership validation: verify asset belongs to workspace
     const asset = await prisma.videoAsset.findFirst({
       where: {
-        id: params.id,
-        workspaceId: params.workspaceId,
+        id: id,
+        workspaceId: workspaceId,
       },
     });
 

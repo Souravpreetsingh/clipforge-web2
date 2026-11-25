@@ -6,8 +6,9 @@
 
 import { r2Client } from "./r2-client";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
-import { getSignedUrl, getPutObjectPresigner } from "@aws-sdk/s3-request-presigner";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import type { S3Client } from "@aws-sdk/client-s3";
+import { v4 as uuidv4 } from "uuid";
 
 // ============================================================
 // CONFIGURATION & CONSTANTS
@@ -24,24 +25,20 @@ export const R2_DOWNLOAD_URL_TTL = Number(
 );
 // 1 hour for download/preview URLs
 
-// Bucket name — from environment
-const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME;
+// Bucket name — from environment (safe fallback keeps imports/builds working)
+const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME || "";
 
 /**
- * Validate that required R2 configuration is present.
- * Called at module import time.
+ * Validate R2 configuration only when a presigned URL is requested.
  */
 function validateR2Config(): void {
   if (!R2_BUCKET_NAME) {
     throw new Error(
       "R2_BUCKET_NAME environment variable is not set. " +
-      "Configure .env.local with R2_BUCKET_NAME=your-bucket-name"
+      "Configure it in the production environment."
     );
   }
 }
-
-// Validate on import
-validateR2Config();
 
 // ============================================================
 // PREIGNED GET URL — Download/Preview
@@ -65,6 +62,8 @@ export async function generatePresignedDownloadUrl(
   key: string,
   expiresInSeconds: number = R2_DOWNLOAD_URL_TTL
 ): Promise<string> {
+  validateR2Config();
+
   const command = new GetObjectCommand({
     Bucket: R2_BUCKET_NAME,
     Key: key,
@@ -91,9 +90,11 @@ export async function generatePresignedPreviewUrl(
   assetId: string,
   expiresInSeconds: number = R2_DOWNLOAD_URL_TTL
 ): Promise<string> {
+  validateR2Config();
+
   // Construct the thumbnail key following the organizational pattern
   // thumbnails/{workspaceId}/{assetId}/thumbnail.jpg
-  const import { v4 as uuidv4 } = "uuid";
+  // uuidv4 is imported at the top of this module
   const timestamp = Date.now().toString(36);
   const randomSuffix = Math.random().toString(36).substring(2, 8);
   const cleanAssetId = assetId.replace(/[^a-zA-Z0-9]/g, "") || uuidv4().toString().replace(/-/g, "").substring(0, 12);
@@ -137,6 +138,8 @@ export async function generatePresignedUploadUrl(
   contentType: string,
   expiresInSeconds: number = R2_UPLOAD_URL_TTL
 ): Promise<string> {
+  validateR2Config();
+
   // Validate content type is an allowed video type
   const lowerContentType = contentType.toLowerCase();
   const allowedVideo = [
@@ -170,7 +173,7 @@ export async function generatePresignedUploadUrl(
     ContentType: contentType,
   });
 
-  const presignedUrl = await getPutObjectPresigner(r2Client)(command, expiresInSeconds);
+  const presignedUrl = await getSignedUrl(r2Client, command, { expiresIn: expiresInSeconds });
 
   return presignedUrl;
 }

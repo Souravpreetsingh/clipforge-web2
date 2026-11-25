@@ -147,7 +147,7 @@ export default function DashboardPage() {
               <div
                 className="mt-2 font-body-sm text-body-sm text-secondary"
               >
-                High virality hook index (>85 score)
+                High virality hook index (&gt;85 score)
               </div>
             </div>
 
@@ -193,7 +193,7 @@ export default function DashboardPage() {
               >
                 <div
                   className="bg-primary-container h-full rounded-full"
-                  style="width: 70%"
+                  style={{ width: "70%" }}
                 ></div>
               </div>
             </div>
@@ -415,8 +415,7 @@ export default function DashboardPage() {
           >
             {/* Projects Main Column (8 cols) */}
             <div
-              lg:col-span-8
-              className="flex flex-col gap-4"
+              className="lg:col-span-8 flex flex-col gap-4"
             >
               <div
                 className="flex items-center justify-between"
@@ -555,7 +554,7 @@ export default function DashboardPage() {
                         >
                           progress_activity
                         </span>
-                      </span>
+                      </div>
                       <span
                         className="absolute bottom-1 right-1 font-mono-code text-[10px] px-1 rounded bg-inverse-surface/85 text-inverse-on-surface"
                       >
@@ -754,8 +753,7 @@ export default function DashboardPage() {
 
               {/* Inspector & Activity Sidebar Column (4 cols) */}
               <div
-                lg:col-span-4
-                className="flex flex-col gap-4"
+                className="lg:col-span-4 flex flex-col gap-4"
               >
                 {/* Real-time Activity Feed */}
                 <div
@@ -914,7 +912,7 @@ export default function DashboardPage() {
                   >
                     <div
                       className="bg-primary h-full rounded-full"
-                      style="width: 32.4%"
+                      style={{ width: "32.4%" }}
                     ></div>
                   </div>
                   <div

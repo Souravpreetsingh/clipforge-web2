@@ -17,7 +17,7 @@
  * without code changes.
  */
 
-import {
+import type {
   TranscriptionResult,
   HighlightCandidate,
   HighlightCategory,
@@ -162,9 +162,7 @@ function evaluateEmotionalEngagement(
   score += exclamationCount * 0.1;
 
   // Emotional words
-  const emotionalWords = /
-    (joy|happiness|glad|pleased|angry|furious|sad|devastated|excited|thrilled| disappointed|frustrated)/i
-  ;
+  const emotionalWords = /(joy|happiness|glad|pleased|angry|furious|sad|devastated|excited|thrilled|disappointed|frustrated)/i;
   if (emotionalWords.test(text)) {
     score += 0.25;
   }
@@ -311,9 +309,7 @@ function evaluateReplayPotential(
   }
 
   // Emotional resonance
-  const emotionalWords = /
-    (love|hate|heart|feel|emotion|passion|strong|deep)/i
-  ;
+  const emotionalWords = /(love|hate|heart|feel|emotion|passion|strong|deep)/i;
   if (emotionalWords.test(text)) {
     score += 0.1;
   }

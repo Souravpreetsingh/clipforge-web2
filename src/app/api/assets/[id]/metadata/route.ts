@@ -44,7 +44,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { AssetMetadataResponse } from "@/lib/storage/storage-types";
 
@@ -103,8 +103,7 @@ export async function GET(
     const validatedData = validationResult.data;
     
     // ---- Step 3: Query asset from database with authorization ----
-    import { PrismaClient } from "@prisma/client";
-    const db = new PrismaClient();
+    const db = prisma;
     
     const asset = await db.videoAsset.findFirst({
       where: {
@@ -114,12 +113,12 @@ export async function GET(
     });
     
     // Fetch project and processing job separately (no @relation includes)
-    const project = projectId ? await db.project.findUnique({
-      where: { id: projectId },
+    const project = asset?.projectId ? await db.project.findUnique({
+      where: { id: asset.projectId },
     }) : undefined;
     
     const processingJobs = await db.processingJob.findMany({
-      where: { videoAssetId: assetId },
+      where: { videoAssetId: validatedData.assetId },
       orderBy: { createdAt: "desc" },
       take: 1,
     });

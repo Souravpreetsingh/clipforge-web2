@@ -573,7 +573,6 @@ async function executeUploadPipeline(
 
   const completeUrl = `https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&uploadId=${uploadState.uploadId}`;
 
-  const fetch = require('node-fetch');
   const completeResponse = await fetch(completeUrl, {
     method: 'POST',
     headers: {

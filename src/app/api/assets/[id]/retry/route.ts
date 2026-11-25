@@ -43,7 +43,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { AssetRetryResponse } from "@/lib/storage/storage-types";
 
@@ -87,8 +87,7 @@ export async function POST(
     const validatedData = validationResult.data;
     
     // ---- Step 3: Ownership Validation ----
-    import { PrismaClient } from "@prisma/client";
-    const db = new PrismaClient();
+    const db = prisma;
     
     const asset = await db.videoAsset.findFirst({
       where: {

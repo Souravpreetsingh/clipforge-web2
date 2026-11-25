@@ -1,3 +1,5 @@
+"use client";
+
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { Heart, Mail, Users, Tv, Settings, LogOut, Shield, Music } from 'lucide-react';
@@ -62,20 +64,4 @@ export function IntegrationsLayout({ children }: IntegrationsLayoutProps) {
   );
 }
 
-/**
- * Helper to get abbreviated workspace ID for display.
- * 
- * In production, this would come from the authenticated user's workspace.
- * In development, we use the DEV_WORKSPACE_ID env var or a default.
- */
-function useWorkspace() {
-  // This is a simplified hook; in full implementation, would use
-  // the authentication context or DEV_WORKSPACE_ID
-  const workspaceId = typeof window !== 'undefined'
-    ? localStorage.getItem('clipforge_workspace_id')
-    : null;
-
-  return {
-    workspaceId: workspaceId || (process.env.DEV_WORKSPACE_ID || 'ws-dev-001'),
-  };
-}
+export default IntegrationsLayout;

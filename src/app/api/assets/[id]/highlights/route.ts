@@ -16,13 +16,16 @@ import { z } from "zod";
 
 export async function GET(
   request: Request,
-  { params }: { params: { workspaceId: string; id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    const workspaceId = new URL(request.url).searchParams.get("workspaceId") || "";
+
     // Query any completed transcript for this asset
     const transcript = await prisma.transcript.findFirst({
       where: {
-        videoAssetId: params.id,
+        videoAssetId: id,
         status: "COMPLETED",
       },
     });
@@ -46,8 +49,8 @@ export async function GET(
       // Ownership validation: verify asset belongs to workspace
       const asset = await prisma.videoAsset.findFirst({
         where: {
-          id: params.id,
-          workspaceId: params.workspaceId,
+          id: id,
+          workspaceId: workspaceId,
         },
       });
 
@@ -74,8 +77,8 @@ export async function GET(
     // No completed transcript found — direct user to initiate transcription
     const asset = await prisma.videoAsset.findFirst({
       where: {
-        id: params.id,
-        workspaceId: params.workspaceId,
+        id: id,
+        workspaceId: workspaceId,
       },
     });
 

@@ -35,7 +35,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { AssetStatusResponse, AssetStatusRequest } from "@/lib/storage/storage-types";
 
@@ -89,20 +89,19 @@ export async function GET(
     }
     
     // ---- Step 3: Query asset from database with authorization ----
-    import { PrismaClient } from "@prisma/client";
-    const db = new PrismaClient();
+    const db = prisma;
     
     const asset = await db.videoAsset.findFirst({
       where: {
         id: assetId,
         workspaceId: workspaceId,
       },
-      include: {
-        processingJob: {
-          orderBy: { createdAt: "desc" },
-          take: 1, // Only the most recent job
-        },
-      },
+    });
+
+    const processingJobs = await db.processingJob.findMany({
+      where: { videoAssetId: assetId },
+      orderBy: { createdAt: "desc" },
+      take: 1,
     });
     
     if (!asset) {
@@ -116,8 +115,8 @@ export async function GET(
     let statusResponse: AssetStatusResponse;
     
     // Check if there's an active processing job
-    if (asset.processingJob && asset.processingJob.status) {
-      const job = asset.processingJob;
+    const job = processingJobs[0];
+    if (job && job.status) {
       
       // Determine if job is active (not completed or failed)
       const isTerminalStatus = 

@@ -13,7 +13,8 @@
  */
 
 import { PrismaClient } from "@prisma/client";
-import { AgentStateMachine, AgentRun, AgentClipStatus, PublishingMode, AgentErrorCode, AGENT_ERROR_MESSAGES } from "./types";
+import { AgentStateMachine } from "./state-machine";
+import { AgentRun, AgentClipStatus, PublishingMode, AgentErrorCode, AGENT_ERROR_MESSAGES } from "./types";
 import { createPublishingJobComplete } from "@/lib/integrations/youtube/publishing";
 import { areCredentialsMissing, checkCredentials } from "@/lib/integrations/youtube";
 import { generateDefaultMetadata, validatePublishingMetadata } from "@/lib/integrations/youtube/videos";

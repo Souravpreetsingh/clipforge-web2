@@ -5,10 +5,10 @@ import { getPublishingJobWithEvents, updatePublishingJobStatus, cancelPublishing
 // Get a specific publishing job with its events/history
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = params.id;
+    const { id: jobId } = await params;
 
     if (!jobId) {
       return NextResponse.json(
@@ -56,10 +56,10 @@ export async function GET(
 // Update a publishing job (status, metadata, etc.)
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = params.id;
+    const { id: jobId } = await params;
     const body = await request.json();
     const updates = body as Partial<{
       status: string;
@@ -112,78 +112,37 @@ export async function PATCH(
   }
 }
 
-// POST /api/publishing/jobs/[id]/retry
-// Re-enqueue a failed publishing job
+// POST /api/publishing/jobs/[id]
+// Action determined by ?action=retry|cancel (default: retry)
 export async function POST(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const jobId = params.id;
+    const { id: jobId } = await params;
+    const action = new URL(request.url).searchParams.get('action') || 'retry';
 
-    // If Google credentials are missing, simulate retry
     const areMissing = process.env.GOOGLE_CLIENT_ID == null ||
       process.env.GOOGLE_CLIENT_SECRET == null ||
       process.env.GOOGLE_REDIRECT_URI == null;
 
+    if (action === 'cancel') {
+      if (areMissing) {
+        const { cancelPublishingJob } = await import('@/lib/integrations/youtube/publishing');
+        const result = await cancelPublishingJob(jobId);
+        return NextResponse.json({ success: result.success, error: result.error, mode: 'mock' });
+      }
+      return NextResponse.json({ error: 'Real cancellation not yet implemented' }, { status: 501 });
+    }
+
+    // retry (default)
     if (areMissing) {
       console.warn('Mock mode: simulating publishing job retry');
-      return NextResponse.json({
-        success: true,
-        message: 'Publishing job retry initiated in mock mode',
-        jobId,
-      });
+      return NextResponse.json({ success: true, message: 'Publishing job retry initiated in mock mode', jobId });
     }
-
-    // Real mode: would check retry limits and re-enqueue the BullMQ job
-    return NextResponse.json(
-      { error: 'Real retry functionality not yet implemented' },
-      { status: 501 }
-    );
+    return NextResponse.json({ error: 'Real retry functionality not yet implemented' }, { status: 501 });
   } catch (error) {
-    console.error('Retry publishing job error:', error);
-    return NextResponse.json(
-      { error: 'Failed to retry publishing job' },
-      { status: 500 }
-    );
-  }
-}
-
-// POST /api/publishing/jobs/[id]/cancel
-// Cancel a publishing job
-export async function POST(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  try {
-    const jobId = params.id;
-
-    // If Google credentials are missing, simulate cancellation
-    const areMissing = process.env.GOOGLE_CLIENT_ID == null ||
-      process.env.GOOGLE_CLIENT_SECRET == null ||
-      process.env.GOOGLE_REDIRECT_URI == null;
-
-    if (areMissing) {
-      const { cancelPublishingJob } = await import('@/lib/integrations/youtube/publishing');
-      const result = await cancelPublishingJob(jobId);
-
-      return NextResponse.json({
-        success: result.success,
-        error: result.error,
-        mode: 'mock',
-      });
-    }
-
-    // Real mode: would update the DB job status to CANCELLED
-    return NextResponse.json(
-      { error: 'Real cancellation not yet implemented' },
-      { status: 501 }
-    );
-  } catch (error) {
-    console.error('Cancel publishing job error:', error);
-    return NextResponse.json(
-      { error: 'Failed to cancel publishing job' },
-      { status: 500 }
-    );
+    console.error('Publishing job action error:', error);
+    return NextResponse.json({ error: 'Failed to process publishing job action' }, { status: 500 });
   }
 }

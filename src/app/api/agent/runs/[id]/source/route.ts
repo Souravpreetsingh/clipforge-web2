@@ -8,9 +8,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const { youtubeUrl, sourceAuthorized, authorizedAssetId } = await request.json();
 
     if (!youtubeUrl && !authorizedAssetId) {
@@ -96,8 +96,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
             sourceType: "IMPORTED_ASSET",
           },
           updatedAt: new Date(),
-        });
-      }
+        },
+      });
 
       return new Response(
         JSON.stringify({

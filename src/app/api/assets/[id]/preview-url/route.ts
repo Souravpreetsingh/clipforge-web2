@@ -33,7 +33,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import type { AssetPreviewUrlResponse } from "@/lib/storage/storage-types";
 import { generatePresignedPreviewUrl } from "@/lib/storage/r2-presigned";
@@ -79,8 +79,7 @@ export async function POST(
     
     // ---- Step 3: Ownership Validation ----
     // Query the asset and verify it belongs to the requested workspace
-    import { PrismaClient } from "@prisma/client";
-    const db = new PrismaClient();
+    const db = prisma;
     
     const asset = await db.videoAsset.findFirst({
       where: {

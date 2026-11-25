@@ -15,20 +15,15 @@ import { prisma } from "@/lib/prisma";
 
 export async function GET(
   request: Request,
-  { params }: { params: { workspaceId: string; id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
+    const workspaceId = new URL(request.url).searchParams.get("workspaceId") || "";
+
     // Query the AI processing run record
     const run = await prisma.aiProcessingRun.findUnique({
-      where: { id: params.id },
-      include: {
-        videoAsset: {
-          include: {
-            workspace: true,
-          },
-        },
-        workspace: true,
-      },
+      where: { id: id },
     });
 
     if (!run) {
@@ -39,7 +34,7 @@ export async function GET(
     }
 
     // Check ownership/workspace access
-    if (run.workspaceId !== params.workspaceId) {
+    if (run.workspaceId !== workspaceId) {
       return NextResponse.json(
         { error: "Access denied: workspace ID mismatch" },
         { status: 403 }
@@ -78,7 +73,7 @@ export async function GET(
       { status: 500 }
     );
   }
-});
+}
 
 /** Human-readable status message */
 function getJobStatusMessage(

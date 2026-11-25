@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { 
@@ -7,9 +9,7 @@ import {
   Shield,
   Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { areCredentialsMissing } from '@/lib/integrations/youtube';
-import { retrieveChannelInfo, hasConnectedChannel, needsReauthorization } from '@/lib/integrations/youtube/channels';
-import type { TokenStorageInterface } from '@/lib/integrations/youtube/tokens';
+import { areCredentialsMissing, retrieveChannelInfo, hasConnectedChannel, needsReauthorization, MockTokenStorage } from '@/lib/integrations/youtube/client-safe';
 
 // Mock storage for development
 const mockStorage = new (await import('@/lib/integrations/youtube/tokens')).MockTokenStorage();
@@ -57,7 +57,7 @@ export function ConnectedChannel() {
     // For now, simulate a short delay then check status
     const checkConnection = async () => {
       const isConnected = await hasConnectedChannel(
-        new (await import('@/lib/integrations/youtube/tokens')).MockTokenStorage(),
+        new MockTokenStorage(),
         workspaceId || 'ws-dev-001'
       );
 
@@ -210,3 +210,5 @@ export function ConnectedChannel() {
     </div>
   );
 }
+
+export default ConnectedChannel;

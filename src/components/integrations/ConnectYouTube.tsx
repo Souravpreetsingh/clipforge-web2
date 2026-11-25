@@ -1,8 +1,10 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { AlertCircle, CheckCircle, Loader2, Moon } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { areCredentialsMissing, VERSION } from '@/lib/integrations/youtube';
+import { areCredentialsMissing, VERSION } from '@/lib/integrations/youtube/client-safe';
 
 /**
  * ConnectYouTube - YouTube channel connection card.
@@ -170,8 +172,10 @@ export function ConnectYouTube() {
         ariaBusy={loading}
       >
         {loading ? (
-          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Connecting...
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Connecting...
+          </>
         ) : (
           'Connect YouTube'
         )}
@@ -185,3 +189,5 @@ export function ConnectYouTube() {
     </div>
   );
 }
+
+export default ConnectYouTube;

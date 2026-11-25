@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -13,9 +15,7 @@ import {
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Table, TableHeader, TableRow, TableCell, TableBody } from '@/components/ui/table';
-import { areCredentialsMissing } from '@/lib/integrations/youtube';
-import { getPublishingHistory } from '@/lib/integrations/youtube/publishing';
-import { YouTubeErrorCode, createAuthError } from '@/lib/integrations/youtube/errors';
+import { areCredentialsMissing, getPublishingHistory, YouTubeErrorCode, createAuthError } from '@/lib/integrations/youtube/client-safe';
 
 /**
  * PublishingDashboard - Displays the publishing history and status.
@@ -160,7 +160,6 @@ export function PublishingDashboard() {
 
     try {
       // Re-fetch publishing history
-      const { getPublishingHistory } = await import('@/lib/integrations/youtube/publishing');
       const result = await getPublishingHistory(workspaceId || 'ws-dev-001');
 
       if (result.success && result.publishingJobs) {
@@ -236,8 +235,10 @@ export function PublishingDashboard() {
           className="gap-1"
         >
           {refreshing ? (
-            <RefreshCw className="h-3 w-3 animate-spin" />
-            Refresh
+            <>
+              <RefreshCw className="h-3 w-3 animate-spin" />
+              Refresh
+            </>
           ) : (
             'Refresh'
           )}
@@ -374,3 +375,5 @@ export function PublishingDashboard() {
     </div>
   );
 }
+
+export default PublishingDashboard;

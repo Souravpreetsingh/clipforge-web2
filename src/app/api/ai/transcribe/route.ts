@@ -35,10 +35,7 @@ const initiateTranscribeSchema = z.object({
     .describe("Whisper model name (e.g., 'whisper-1')"),
 });
 
-export async function POST(
-  request: Request,
-  { params }: { params: { workspaceId: string } }
-) {
+export async function POST(request: Request) {
   try {
     // Parse and validate request body
     const body = await request.json();

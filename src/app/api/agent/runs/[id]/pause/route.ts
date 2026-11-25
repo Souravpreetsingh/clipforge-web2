@@ -8,9 +8,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { id } = params;
+    const { id } = await params;
     const { reason } = await request.json();
 
     const stateMachine = new (await import("@/lib/agent/state-machine")).AgentStateMachine(

@@ -1225,6 +1225,9 @@ export type { PublishingJobStatus as PublishingJobStatusType };
 export {
   // Configuration
   GOOGLE_CREDENTIALS_MISSING,
+  GOOGLE_CLIENT_ID,
+  GOOGLE_CLIENT_SECRET,
+  GOOGLE_REDIRECT_URI,
   YOUTUBE_OAUTH_ENCRYPTION_KEY,
   
   // OAuth Flow

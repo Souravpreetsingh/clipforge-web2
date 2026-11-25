@@ -19,10 +19,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 
-export async function POST(
-  request: Request,
-  { params }: { params: { workspaceId: string } }
-) {
+export async function POST(request: Request) {
   try {
     // Parse and validate request body
     const body = await request.json();

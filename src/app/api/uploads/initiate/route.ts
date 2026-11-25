@@ -34,10 +34,11 @@
  */
 
 import { NextResponse } from "next/server";
-import { prisma } from "@/prisma/client";
+import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { initiateUpload, completeUpload, uploadInitiateSchema } from "@/lib/storage/r2-upload";
-import { generatePresignedUploadUrl, MAX_VIDEO_SIZE_BYTES, ALLOWED_VIDEO_MIME_TYPES } from "@/lib/storage/r2-presigned";
+import { generatePresignedUploadUrl } from "@/lib/storage/r2-presigned";
+import { MAX_VIDEO_SIZE_BYTES, ALLOWED_VIDEO_MIME_TYPES } from "@/lib/storage/r2-client";
 import type { UploadInitiateRequest, UploadInitiateResponse } from "@/lib/storage/storage-types";
 
 // ============================================================

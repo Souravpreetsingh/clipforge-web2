@@ -11,7 +11,8 @@
 /// Next.js only handles metadata and URL coordination.
 
 import type { R2UploadUrlResult } from "./r2-client";
-import type { VideoAsset } from "@/prisma/client";
+import type { VideoAsset } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { verifyR2ObjectExists } from "./r2-client";
 import { MAX_VIDEO_SIZE_BYTES, ALLOWED_VIDEO_MIME_TYPES, ALLOWED_VIDEO_EXTENSIONS } from "./r2-client";
 import { v4 as uuidv4 } from "uuid";
@@ -242,8 +243,7 @@ export async function initiateUpload(
   }
   
   // ---- Step 4: Create VideoAsset Record ----
-  import { PrismaClient } from "@prisma/client";
-  const prisma = new PrismaClient();
+  // Use the shared Prisma client instance
   
   // Set asset status to UPLOADING initially
   const assetStatus = "UPLOADING" as const;
@@ -356,8 +356,7 @@ export async function completeUpload(
   jobId: string;
   jobType: string;
 }> {
-  import { PrismaClient } from "@prisma/client";
-  const prisma = new PrismaClient();
+  // Use shared Prisma client instance
   
   // ---- Step 1: Ownership Validation ----
   // Query the asset and verify it belongs to the workspace

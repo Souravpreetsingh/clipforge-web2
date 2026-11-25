@@ -401,5 +401,3 @@ export {
 
   // Error category type
 };
-
-export type { YouTubeErrorCode, YouTubeIntegrationError };

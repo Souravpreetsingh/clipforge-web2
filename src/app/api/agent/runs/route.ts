@@ -12,7 +12,8 @@ const prisma = new PrismaClient();
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { workspaceId, runType, source, configuration } = body;
+    const { workspaceId, source, configuration } = body;
+    const requestedRunType = body.runType;
 
     if (!workspaceId) {
       return new Response(
@@ -23,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     // Determine run type
     const runType: "YOUTUBE_SHORTS" | "USER_UPLOAD" | "IMPORTED_ASSET" =
-      runType || "YOUTUBE_SHORTS";
+      requestedRunType || "YOUTUBE_SHORTS";
 
     // Set default configuration if not provided
     const defaultConfig: AgentConfiguration = {
