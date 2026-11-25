@@ -1,0 +1,8 @@
+check.ps1
+debug-gen.ps1
+debug2.bat
+run-gen.bat
+temp/
+test-gen.js
+test-minimal/
+test-sqlite/
